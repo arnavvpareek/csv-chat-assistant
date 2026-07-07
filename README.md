@@ -19,15 +19,19 @@ Most "chat with your data" demos have a dirty secret: the LLM never actually com
 The agent is a **hand-built ReAct loop** (Reason → Act → Observe) in ~200 lines — no black-box agent framework:
 
 ```mermaid
-flowchart LR
-    A["🧑 Question"] --> B["🧠 LLM sees schema only<br/>(columns, dtypes, 3 sample rows)"]
-    B --> C["✍️ Writes ONE pandas expression"]
-    C --> D["🔒 Sandboxed eval<br/>(no builtins, no imports, no file I/O)"]
-    D -- "error" --> E["🔁 One retry<br/>with the error message"]
-    E --> D
-    D -- "result" --> F["💬 LLM phrases a one-sentence answer"]
-    F --> G["Answer + code + table<br/>shown in chat"]
-    E -- "fails again" --> H["❌ Real error shown —<br/>never a fabricated answer"]
+flowchart TD
+    A(["🧑 User asks a question"]) --> B["🧠 LLM reads the schema only<br/>column names · dtypes · 3 sample rows"]
+    B --> C["✍️ LLM writes one pandas expression"]
+    C --> D{"🔒 Sandboxed eval<br/>no builtins · no imports · no file I/O"}
+    D -->|success| E["💬 LLM phrases the result<br/>as a one-sentence answer"]
+    D -->|error| F["🔁 Retry once<br/>error message fed back to LLM"]
+    F -->|success| E
+    F -->|fails again| G(["❌ Show the real error<br/>never fabricate an answer"])
+    E --> H(["✅ Answer + code + table in chat"])
+
+    style D fill:#1a7f37,color:#fff,stroke:#1a7f37
+    style G fill:#cf222e,color:#fff,stroke:#cf222e
+    style H fill:#0969da,color:#fff,stroke:#0969da
 ```
 
 Key properties:
@@ -135,11 +139,11 @@ Upload any CSV and start asking questions.
 
 ## Limitations (the honest section)
 
-1. **The sandbox is a guardrail, not a jail.** A restricted in-process `eval` defends against an LLM going off-script — which is the actual threat model here — but the Python security community's consensus is that no in-process eval sandbox can fully contain a *determined human attacker* (creative object-graph traversals keep being discovered). A production deployment handling adversarial users would execute generated code in an isolated subprocess or container. I chose the eval approach consciously, knowing where its boundary lies.
+1. **The sandbox is a guardrail, not a jail.** A restricted in-process `eval` reliably stops an LLM going off-script, but no eval sandbox can fully contain a determined human attacker. A production version would run generated code in an isolated subprocess or container.
 
-2. **One expression per question limits analytical depth.** Multi-stage analyses (fit a regression, then compare residuals across groups) can't fit in a single pandas expression, and the agent has no conversational memory — each question is answered from scratch, so "now break that down by year" won't understand what "that" is. Supporting true multi-step reasoning would need a plan-and-execute loop with intermediate state, which trades the simplicity and auditability that make this design easy to trust.
+2. **One expression, no memory.** Multi-stage analyses don't fit in a single pandas expression, and each question is answered from scratch — a follow-up like *"now break that down by year"* won't know what "that" refers to. Fixing this needs a plan-and-execute loop, at the cost of the simplicity that makes this design auditable.
 
-3. **Answers depend on an LLM reading a schema, not a data dictionary.** Column names like `rating` are ambiguous (content rating? user score?). The model usually infers correctly from sample values, but a misread column can produce a *correct-looking* answer to the wrong question — the displayed code is the user's tool for catching this, and it requires them to read it.
+3. **Ambiguous columns can mislead.** The LLM sees only the schema, so a column like `rating` (content rating? user score?) can be misread — producing a correct-looking answer to the wrong question. The displayed code exists so users can catch exactly this.
 
 ---
 
