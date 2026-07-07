@@ -16,18 +16,34 @@ Most "chat with your data" demos have a dirty secret: the LLM never actually com
 
 ## How it works
 
-The agent is a **hand-built ReAct loop** (Reason → Act → Observe) in ~200 lines — no black-box agent framework:
+### The core problem
+
+An LLM can't "look at" a 10,000-row CSV — it would blow past the context window, and LLMs are bad at arithmetic over raw data anyway (they'd miscount rows and hallucinate averages). But pandas is *perfect* at arithmetic and terrible at understanding English questions.
+
+So we split the job: **the LLM translates English → pandas code, and pandas does the actual math.** The LLM never sees your data in bulk — only its shape.
+
+### The loop, turn by turn
+
+Say the user asks *"What's the average rating of movies released after 2015?"*
+
+1. **Reason** — We send the LLM a prompt containing the question plus the dataframe's **schema only**: column names, dtypes, and ~3 sample rows. That's a few hundred tokens regardless of whether the CSV has 100 rows or 10 million.
+2. **Act** — The LLM is instructed to output exactly one pandas expression, e.g. `df[df['release_year'] > 2015]['rating'].mean()`. It does *not* answer the question directly — it can't, it hasn't seen the data.
+3. **Observe** — Our code runs that expression against the real dataframe in a **sandbox**: an `eval()` with builtins stripped, no imports, no `os`/`sys`, no file access. The only thing in scope is `df`. This matters because we're executing code written by an LLM — the sandbox is the trust boundary of the whole app.
+4. **Answer** — The raw result (say, `7.42`) goes back to the LLM: "the code returned 7.42, phrase this as a one-sentence answer."
+5. **Retry once** — If the code crashes (LLM guessed a wrong column name, say), we feed the error message back: "your code failed with this error, fix it." One retry only — if it fails again we show the user the real error rather than a made-up answer. Unlimited retries would burn API quota looping on an unanswerable question.
+
+This Reason → Act → Observe cycle is the **ReAct pattern** — here it is as a flowchart, hand-built in ~200 lines with no black-box agent framework:
 
 ```mermaid
 flowchart TD
-    A(["🧑 User asks a question"]) --> B["🧠 LLM reads the schema only<br/>column names · dtypes · 3 sample rows"]
-    B --> C["✍️ LLM writes one pandas expression"]
-    C --> D{"🔒 Sandboxed eval<br/>no builtins · no imports · no file I/O"}
-    D -->|success| E["💬 LLM phrases the result<br/>as a one-sentence answer"]
-    D -->|error| F["🔁 Retry once<br/>error message fed back to LLM"]
+    A(["🧑 Question"]) --> B["🧠 LLM reads schema only"]
+    B --> C["✍️ Writes one pandas expression"]
+    C --> D{"🔒 Sandboxed eval"}
+    D -->|success| E["💬 LLM phrases the answer"]
+    D -->|error| F["🔁 Retry once with error"]
     F -->|success| E
-    F -->|fails again| G(["❌ Show the real error<br/>never fabricate an answer"])
-    E --> H(["✅ Answer + code + table in chat"])
+    F -->|fails again| G(["❌ Show real error"])
+    E --> H(["✅ Answer + code + table"])
 
     style D fill:#1a7f37,color:#fff,stroke:#1a7f37
     style G fill:#cf222e,color:#fff,stroke:#cf222e
