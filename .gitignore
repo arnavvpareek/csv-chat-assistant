@@ -1,0 +1,15 @@
+# Secrets
+.env
+
+# Virtual environment
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Streamlit local secrets
+.streamlit/secrets.toml
+
+# Local dev tooling
+.claude/
