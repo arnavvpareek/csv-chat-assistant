@@ -7,6 +7,9 @@
 ![LangChain](https://img.shields.io/badge/LangChain-1.x-1C3C3C?logo=langchain&logoColor=white)
 ![Groq](https://img.shields.io/badge/LLM-Llama%203.3%2070B%20via%20Groq-F55036)
 ![pandas](https://img.shields.io/badge/pandas-3.0-150458?logo=pandas&logoColor=white)
+[![Live demo](https://img.shields.io/badge/🚀_Live_demo-csv--chat--assistant.streamlit.app-FF4B4B?style=for-the-badge)](https://csv-chat-assistant.streamlit.app/)
+
+### ▶ [Try it live — no install needed](https://csv-chat-assistant.streamlit.app/) — upload any CSV and start asking.
 
 Most "chat with your data" demos have a dirty secret: the LLM never actually computes anything — it guesses. This app doesn't guess. The LLM **writes one line of pandas code**, that code runs **in a sandbox against your real dataframe**, and the result comes back with the code displayed right under the answer. Every number is reproducible, every claim is auditable.
 
